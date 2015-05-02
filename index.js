@@ -1,29 +1,73 @@
 var edge = require('edge')
-var path = require('path')
 var extend = require('xtend')
 var EventEmitter = require('events').EventEmitter
+var icons = require('./icons')
+var debug = require('debug')('tray-windows')
 
 var raw = edge.func({source: 'lib/tray.cs', references: ['System.Drawing.dll','System.Windows.Forms.dll']})
 
 function tray(opt, cb) {
   var ctx = new EventEmitter
+  opt = opt || {}
+  opt.icon = opt.icon || icons.grey()
+
+  ctx.addMenuItem = function (item) {
+    messages.push({
+      e: 'add:menuItem',
+      data: item
+    })
+    return this
+  }
+
+  ctx.delMenuItem = function (item) {
+    messages.push({
+      e: 'del:menuItem',
+      data: item
+    })
+    return this
+  }
+
+  ctx.delMenuItemAt = function (index) {
+    messages.push({
+      e: 'del:menuItem:at',
+      data: index
+    })
+    return this
+  }
+
+  ctx.exit = function () {
+    messages.push({
+      e: 'exit',
+      data: null
+    })
+    // stop additional messages from being queued
+    messages.push = function () {}
+    return this
+  }
+
+  ctx.dropMenu = function () {
+    messages.push({
+      e: 'drop:menu',
+      data: null
+    })
+    return this
+  }
+
+  ctx.updateIcon = function (buffer) {
+    messages.push({
+      e: 'updateIcon',
+      data: buffer
+    })
+  }
+
+  var messages = []
+
   var args = extend(opt, {
-    eventHandler: eventHandler(ctx)
+    eventHandler: eventHandler(ctx),
+    checkMessage: check(messages)
   })
 
   ctx.on('start', function (send) {
-    console.log(send)
-    send('hi', function (e, r) {
-      console.log('<-', arguments)
-    })
-    send('hi2', function (e, r) {
-      console.log('<-', arguments)
-    })
-    // setInterval(function () {
-    //   send({a:'asds'}, function () {
-    //     console.log(arguments)
-    //   })
-    // }, 500)
     cb(null, ctx)
   })
 
@@ -32,7 +76,6 @@ function tray(opt, cb) {
       if (err) {
         ctx.emit('error', err)
       }
-      console.log('ret', r)
     })
 
   } catch (e) {
@@ -41,12 +84,21 @@ function tray(opt, cb) {
   }
 }
 
+function check(messages) {
+  return function (obj, cb) {
+    var message = messages.shift()
+    // var message = messages[0]
+    cb(null, message)
+  }
+}
+
 function eventHandler(ctx) {
   return function (obj, cb) {
-    console.log('ev', obj)
+    debug('event', obj)
     cb(null, "ok")
     ctx.emit(obj.e, obj.data)
   }
 }
 
 module.exports = tray
+module.exports.icons = icons

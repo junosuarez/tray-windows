@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Threading.Tasks;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -9,6 +10,7 @@ using System.Reflection;
 public class Startup
 {
     private Func<object, Task<object>> eventHandler;
+    private Func<object, Task<object>> checkMessage;
     private SysTrayApp app;
 
     public async Task<object> Invoke(dynamic input)
@@ -17,8 +19,10 @@ public class Startup
         var items = ((object[])input.items).ToList().Cast<string>();
 
         this.eventHandler = (Func<object, Task<object>>)input.eventHandler;
+        this.checkMessage = (Func<object, Task<object>>)input.checkMessage;
 
-
+        
+        
         var i = new Input
         {
             Name = name,
@@ -52,11 +56,37 @@ public class Startup
         await eventHandler(new { e = "start", data =  receive});
         
 
+
         app = new SysTrayApp(i);
+        var t = new System.Timers.Timer(20);
+        t.AutoReset = true;
+        t.Elapsed += onTick;
+        t.Start();
         Application.Run(app);
         SendEvent("stop", null);
         
         return 0;
+    }
+
+    void onTick(object sender, EventArgs t)
+    {
+        Check();
+    }
+
+    private async void Check()
+    {
+        var m = await checkMessage(null);
+        var message = (dynamic)m;
+        try
+        {
+            var e = (string)message.e;
+            var data = (object)message.data;
+            ReceiveEvent(e, data);
+        }
+        catch (Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
+        {
+            // no message
+        }
     }
 
     public void SendEvent (string e, object data) {
@@ -74,11 +104,74 @@ public class Startup
 
     public void ReceiveEvent(string name, dynamic data)
     {
-        SendEvent("receive", new { name = name, data = data });
-        app.Menu.MenuItems.Add(name);
+        switch (name)
+        {
+            case "add:menuItem":
+                addMenuItem((string) data);
+                break;
+            case "del:menuItem":
+                delMenuItem((string)data);
+                break;
+            case "del:menuItem:at":
+                delMenuItemAt((int)data);
+                break;
+            case "exit":
+                Application.Exit();
+                break;
+            case "drop:menu":
+                app.trayMenu.MenuItems.Clear();
+                break;
+            case "updateIcon":
+                updateIcon((byte[])data);
+                break;
+        }
+    }
+
+    private void updateIcon(byte[] data)
+    {
+        var source = Image.FromStream(new System.IO.MemoryStream(data));
+
+        var target = new Bitmap(40, 40, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var g = Graphics.FromImage(target);
+        g.DrawImage(source, 0, 0, 40, 40);
+        var icon = Icon.FromHandle(target.GetHicon());
+
+        app.trayIcon.Icon = icon;
+    }
+
+    private void addMenuItem(string item)
+    {
+        app.trayMenu.MenuItems.Add(app.CreateMenuItem(item));
+    }
+
+    private void delMenuItem(string item)
+    {
+        var menuItem = Tools.ToList<MenuItem>(app.trayMenu.MenuItems).Where(i => i.Text == item).FirstOrDefault();
+        if (menuItem != null)
+        {
+            app.trayMenu.MenuItems.Remove(menuItem);
+        }
+       
+    }
+    private void delMenuItemAt(int index)
+    {
+        app.trayMenu.MenuItems.RemoveAt(index);
     }
 
 
+}
+
+public static class Tools
+{
+    public static List<T> ToList<T>(this IEnumerable source) where T : class
+    {
+        var list = new List<T>();
+        var e = source.GetEnumerator();
+        foreach (var i in source) {
+            list.Add(i as T);
+        }
+        return list;
+    }
 }
 
 public class Input
@@ -97,8 +190,8 @@ public class Input
 public class SysTrayApp : Form
 {
 
-    private NotifyIcon trayIcon;
-    private ContextMenu trayMenu;
+    public NotifyIcon trayIcon;
+    public ContextMenu trayMenu;
     private Input input;
 
     public SysTrayApp(Input input)
@@ -107,15 +200,7 @@ public class SysTrayApp : Form
         // Create a simple tray menu with only one item.
         trayMenu = new ContextMenu();
 
-        trayMenu.MenuItems.AddRange(input.Items.Select(i =>
-        {
-            return new MenuItem(i, OnMenuItemClick);
-        }).ToArray());
-
-        trayMenu.MenuItems.Add("x", (object s, EventArgs e) =>
-        {
-            Application.Exit();
-        });
+        trayMenu.MenuItems.AddRange(input.Items.Select(CreateMenuItem).ToArray());
 
         trayIcon = new NotifyIcon();
 
@@ -128,6 +213,10 @@ public class SysTrayApp : Form
         trayIcon.Click += OnIconClick;
     }
 
+    public MenuItem CreateMenuItem(string text)
+    {
+        return new MenuItem(text, OnMenuItemClick);
+    }
 
     private void OnIconClick(object sender, EventArgs e)
     {
