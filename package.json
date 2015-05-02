@@ -1,16 +1,18 @@
 {
-  "name": "traywin",
+  "name": "tray-windows",
   "version": "1.0.0",
-  "description": "",
+  "description": "npm module to create system tray apps on Windows",
+  "tags": ["tray","system tray","status","windows"],
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "jden <jason@denizac.org>",
   "license": "ISC",
   "dependencies": {
     "debug": "^2.1.3",
     "edge": "^0.10.1",
     "xtend": "^4.0.0"
-  }
+  },
+  "repository": "https://github.com/jden/tray-windows"
 }
