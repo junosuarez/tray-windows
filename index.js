@@ -3,8 +3,9 @@ var extend = require('xtend')
 var EventEmitter = require('events').EventEmitter
 var icons = require('./icons')
 var debug = require('debug')('tray-windows')
+var path = require('path')
 
-var raw = edge.func({source: 'lib/tray.cs', references: ['System.Drawing.dll','System.Windows.Forms.dll']})
+var raw = edge.func({source: path.resolve(__dirname, 'lib/tray.cs'), references: ['System.Drawing.dll','System.Windows.Forms.dll']})
 
 function tray(opt, cb) {
   var ctx = new EventEmitter
